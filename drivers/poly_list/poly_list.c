@@ -8,6 +8,77 @@
 #include "poly_list.h"
 
 /*
+ * Struct to store a stack or a queue
+ */
+struct QSList
+{
+    int operation_mode = POLY_LIST_MODE_QUEUE;  // Default to be queue
+    int front, rear, size;
+    unsigned capacity;
+    int * array;
+};
+
+
+/*
+ * Constructor for QSList
+ */
+struct QSList* createQSList(unsigned capacity) {
+    struct QSList* qslist = (struct QSList*) malloc(sizeof(struct QSList));
+    qslist->capacity = capacity;
+    qslist->front = 0;
+    qslist->size = 0;
+    qslist->rear = capacity - 1;
+    qslist->array = (int*) malloc(qslist->capacity * sizeof(int)); 
+    return qslist; 
+}
+
+// Helper functions
+int isQSListFull(struct QSList* qslist) 
+{  return (qslist->size == qslist->capacity);  } 
+
+int isQSListEmpty(struct QSList* qslist) 
+{  return (qslist->size == 0); } 
+
+// Function to change mode, return 0 if succeed; 1 if failed
+int changeQSListMode (struct QSList* qslist, int mode) {
+    if (!isQSListEmpty(qslist)) return 1;  // Check if it is empty first
+    qslist->operation_mode = mode;
+    // reset two indices to 0
+    qslist->front = 0;
+    qslist->rear = capacity - 1;
+    return 0;
+}
+
+int qsListAdd(struct QSList* qslist, int item) {
+    if (isQSListFull(qslist)) 
+        return 1; 
+    if (qslist->operation_mode == POLY_LIST_MODE_QUEUE) {
+        qslist->rear = (qslist->rear + 1)%qslist->capacity; 
+        qslist->array[qslist->rear] = item; 
+        qslist->size = qslist->size + 1; 
+        printf("%d enqueued to QSList as queue\n", item);
+        return 0;
+    } else if (qslist->operation_mode == POLY_LIST_MODE_STACK) {
+        qslist->rear = (qslist->rear + 1)%qslist->capacity; 
+        qslist->array[qslist->rear] = item;
+        qslist->size = qslist->size + 1; 
+        printf("%d pushed to QSList as stack\n", item);
+        return 0;
+    } else {
+        return 1;
+    }
+}
+
+int qsListRm(struct QSList* qslist, int* result) {
+    if (isQSListEmpty(qslist))
+        return 1;
+    if (qslist->operation_mode == POLY_LIST_MODE_QUEUE) {
+        
+    }
+}
+
+
+/*
  * Function prototypes for the poly_list driver.
  */
 static int poly_list_open(message *m);

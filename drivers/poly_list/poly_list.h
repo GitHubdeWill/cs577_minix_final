@@ -14,4 +14,8 @@
 #define UPPERPOLY_LIST8 1
 #define LOWERPOLY_LIST8 2
 
+/** Operating Mode */
+#define POLY_LIST_MODE_QUEUE 0
+#define POLY_LIST_MODE_STACK 1
+
 #endif /* __POLY_LIST_H */
