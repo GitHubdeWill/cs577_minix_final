@@ -73,7 +73,18 @@ int qsListRm(struct QSList* qslist, int* result) {
     if (isQSListEmpty(qslist))
         return 1;
     if (qslist->operation_mode == POLY_LIST_MODE_QUEUE) {
-        
+        *result = qslist->array[qslist->front];
+        qslist->front = (qslist->front + 1)%qslist->capacity; 
+        qslist->size = qslist->size - 1;
+        printf("%d dequeued from QSList as queue\n", *result);
+        return 0;
+    } else if (qslist->operation_mode == POLY_LIST_MODE_STACK) {
+        *result = qslist->array[qslist->rear--];
+        qslist->size = qslist->size - 1;
+        printf("%d popped from QSList as stack\n", *result);
+        return 0;
+    } else {
+        return 1;
     }
 }
 
@@ -94,8 +105,9 @@ static void sef_local_startup(void);
 static int sef_cb_init(int type, sef_init_info_t *info);
 static int sef_cb_lu_state_save(int);
 static int lu_state_restore(void);
-static int yesno;
-static int msgCase = DEFAULTPOLY_LIST8;
+
+// Static QSList to store the list
+static struct QSList *the_poly_list = createQSList(50);
 
 /* Entry points to the poly_list driver. */
 static struct chardriver poly_list_tab =
@@ -120,8 +132,6 @@ static int open_counter;
 
 static int poly_list_open(message *UNUSED(m))
 {
-    yesno = random();
-    printf("Random number generated: %d\n", yesno);
     printf("poly_list_open(). Called %d time(s).\n", ++open_counter);
     return OK;
 }
@@ -144,19 +154,9 @@ static int poly_list_ioctl(message *m_ptr){
     printf("Message source: %d\n", m_ptr->m_source);
     printf("Message type: %d\n", m_ptr->m_type);
     printf("Message one: %d\n", m_ptr->m_u.m_m1.m1i1);
-    printf("Message: %d\n", m_ptr->COUNT);
-    switch(m_ptr->COUNT) {
-        case LOWERPOLY_LIST8:
-            msgCase = LOWERPOLY_LIST8;
-            break;
-        case UPPERPOLY_LIST8:
-            msgCase = UPPERPOLY_LIST8;
-            break;
-        default:
-            msgCase = DEFAULTPOLY_LIST8;
-            break;
-    }
-    return 0;
+    printf("Message: %d\n", m_ptr->REQUEST);
+    int status = changeQSListMode(m_ptr->REQUEST);
+    return status;
 }
 
 static int poly_list_transfer(endpoint_t endpt, int opcode, u64_t position,

@@ -18,4 +18,7 @@
 #define POLY_LIST_MODE_QUEUE 0
 #define POLY_LIST_MODE_STACK 1
 
+// Maximum size
+#define POLY_LIST_MAX_SIZE 50
+
 #endif /* __POLY_LIST_H */
