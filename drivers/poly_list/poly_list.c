@@ -12,7 +12,7 @@
  */
 struct QSList
 {
-    int operation_mode = POLY_LIST_MODE_QUEUE;  // Default to be queue
+    int operation_mode;
     int front, rear, size;
     unsigned capacity;
     int * array;
@@ -23,13 +23,22 @@ struct QSList
  * Constructor for QSList
  */
 struct QSList* createQSList(unsigned capacity) {
+    printf("Creating new qsList.\n");
     struct QSList* qslist = (struct QSList*) malloc(sizeof(struct QSList));
+    qslist->operation_mode = POLY_LIST_MODE_QUEUE;  // Default to be queue
     qslist->capacity = capacity;
     qslist->front = 0;
     qslist->size = 0;
     qslist->rear = capacity - 1;
     qslist->array = (int*) malloc(qslist->capacity * sizeof(int)); 
     return qslist; 
+}
+
+void freeQSList(struct QSList *qslist) {
+    printf("Freeing qsList.\n");
+    free(qslist->array);
+    free(qslist);
+    return;
 }
 
 // Helper functions
@@ -41,15 +50,17 @@ int isQSListEmpty(struct QSList* qslist)
 
 // Function to change mode, return 0 if succeed; 1 if failed
 int changeQSListMode (struct QSList* qslist, int mode) {
+    printf("Changing mode qsList.\n");
     if (!isQSListEmpty(qslist)) return 1;  // Check if it is empty first
     qslist->operation_mode = mode;
     // reset two indices to 0
     qslist->front = 0;
-    qslist->rear = capacity - 1;
+    qslist->rear = qslist->capacity - 1;
     return 0;
 }
 
 int qsListAdd(struct QSList* qslist, int item) {
+    printf("Adding to qsList.\n");
     if (isQSListFull(qslist)) 
         return 1; 
     if (qslist->operation_mode == POLY_LIST_MODE_QUEUE) {
@@ -70,6 +81,7 @@ int qsListAdd(struct QSList* qslist, int item) {
 }
 
 int qsListRm(struct QSList* qslist, int* result) {
+    printf("Rming from qsList.\n");
     if (isQSListEmpty(qslist))
         return 1;
     if (qslist->operation_mode == POLY_LIST_MODE_QUEUE) {
@@ -106,9 +118,6 @@ static int sef_cb_init(int type, sef_init_info_t *info);
 static int sef_cb_lu_state_save(int);
 static int lu_state_restore(void);
 
-// Static QSList to store the list
-static struct QSList *the_poly_list = createQSList(50);
-
 /* Entry points to the poly_list driver. */
 static struct chardriver poly_list_tab =
 {
@@ -126,6 +135,9 @@ static struct chardriver poly_list_tab =
 
 /** Represents the /dev/poly_list device. */
 static struct device poly_list_device;
+
+// Static QSList to store the list
+static struct QSList *the_poly_list = NULL;
 
 /** State variable to count the number of times the device has been opened. */
 static int open_counter;
@@ -145,7 +157,7 @@ static int poly_list_close(message *UNUSED(m))
 static struct device * poly_list_prepare(dev_t UNUSED(dev))
 {
     poly_list_device.dv_base = make64(0, 0);
-    poly_list_device.dv_size = make64(strlen(POLY_LIST_MESSAGE), 0);
+    poly_list_device.dv_size = make64(WRITE_SIZE, 0);
     return &poly_list_device;
 }
 
@@ -155,8 +167,10 @@ static int poly_list_ioctl(message *m_ptr){
     printf("Message type: %d\n", m_ptr->m_type);
     printf("Message one: %d\n", m_ptr->m_u.m_m1.m1i1);
     printf("Message: %d\n", m_ptr->REQUEST);
-    int status = changeQSListMode(m_ptr->REQUEST);
-    return status;
+    if (the_poly_list == NULL) the_poly_list = createQSList(POLY_LIST_MAX_SIZE);
+    int opstatus = changeQSListMode(the_poly_list, m_ptr->REQUEST);
+    printf("IOCTL status: %d\n", opstatus);
+    return opstatus;
 }
 
 static int poly_list_transfer(endpoint_t endpt, int opcode, u64_t position,
@@ -164,26 +178,16 @@ static int poly_list_transfer(endpoint_t endpt, int opcode, u64_t position,
     unsigned int UNUSED(flags))
 {
     int bytes, ret;
-    char poly_list_message[4];
+    char poly_list_message[WRITE_SIZE];
+    char readBuffer[WRITE_SIZE];
+    int qslist_output;
+    int qslist_input;
 
-    // Convert to 1/0 (true/false, yes/no).
-    yesno%=2;
-    switch(msgCase) {
-        case LOWERPOLY_LIST8:
-            memcpy(poly_list_message, (yesno) ? POLY_LIST_YES_LOWER : POLY_LIST_NO_LOWER, sizeof poly_list_message);
-            break;
-        case UPPERPOLY_LIST8:
-            memcpy(poly_list_message, (yesno) ? POLY_LIST_YES_UPPER : POLY_LIST_NO_UPPER, sizeof poly_list_message);
-            break;
-        default:
-            memcpy(poly_list_message, (yesno) ? POLY_LIST_YES : POLY_LIST_NO, sizeof poly_list_message);
-            break;
-    }
-    msgCase=DEFAULTPOLY_LIST8;
-
+    int opstatus;  // operation status
 
     printf("poly_list_transfer()\n");
-    printf("Results in %s\n", poly_list_message);
+
+    if (the_poly_list == NULL) the_poly_list = createQSList(POLY_LIST_MAX_SIZE);
 
 
     if (nr_req != 1)
@@ -192,23 +196,48 @@ static int poly_list_transfer(endpoint_t endpt, int opcode, u64_t position,
         printf("poly_list: vectored transfer request, using first element only\n");
     }
 
-    bytes = strlen(poly_list_message) - ex64lo(position) < iov->iov_size ?
-            strlen(poly_list_message) - ex64lo(position) : iov->iov_size;
+    bytes = WRITE_SIZE - ex64lo(position) < iov->iov_size ?
+            WRITE_SIZE - ex64lo(position) : iov->iov_size;
 
     if (bytes <= 0)
     {
+        printf("bytes less than 0: %d\n", bytes);
+        // printf("iov size: %lu\n", iov->iov_size);
         return OK;
     }
+
+    // printf("switching opcode: %d\n", opcode);
+
     switch (opcode)
     {
         case DEV_GATHER_S:
+            // Read operation, we will remove an element from the list
+            opstatus = qsListRm(the_poly_list, &qslist_output);
+            printf("qsList removal operation status: %d\n", opstatus);
+            printf("qsList rming %d\n", qslist_output);
+
+            int n = sprintf(poly_list_message, "%d",  qslist_output);
+            printf("sending back length %d message: %s\n", n, poly_list_message);
+
+
             ret = sys_safecopyto(endpt, (cp_grant_id_t) iov->iov_addr, 0,
                                 (vir_bytes) (poly_list_message + ex64lo(position)),
-                                 bytes);
-            iov->iov_size -= bytes;
+                                 WRITE_SIZE);
+            // iov->iov_size -= WRITE_SIZE;
             break;
+        case DEV_SCATTER_S:
+            // Write operation
+            ret = sys_safecopyfrom(endpt, (cp_grant_id_t) iov->iov_addr, 0, (vir_bytes)readBuffer, WRITE_SIZE);
+            readBuffer[WRITE_SIZE-1]='\0';
+            printf("Read buffer: %s\n", readBuffer);
+            qslist_input = atoi(readBuffer);
 
+            printf("qsList adding %d\n", qslist_input);
+            opstatus = qsListAdd(the_poly_list, qslist_input);
+            printf("qsList addition operation status: %d\n", opstatus);
+            break;
         default:
+            printf("no supportted opcode.\n");
             return EINVAL;
     }
     return ret;
@@ -218,6 +247,7 @@ static int sef_cb_lu_state_save(int UNUSED(state)) {
 /* Save the state. */
     ds_publish_u32("open_counter", open_counter, DSF_OVERWRITE);
 
+    freeQSList(the_poly_list);
     return OK;
 }
 
@@ -228,6 +258,7 @@ static int lu_state_restore() {
     ds_retrieve_u32("open_counter", &value);
     ds_delete_u32("open_counter");
     open_counter = (int) value;
+    the_poly_list = createQSList(POLY_LIST_MAX_SIZE);
 
     return OK;
 }
@@ -263,7 +294,7 @@ static int sef_cb_init(int type, sef_init_info_t *UNUSED(info))
     open_counter = 0;
     switch(type) {
         case SEF_INIT_FRESH:
-            printf("%s", "I've been started!");
+            printf("%s", "Poly_list has been started!");
         break;
 
         case SEF_INIT_LU:
@@ -271,11 +302,12 @@ static int sef_cb_init(int type, sef_init_info_t *UNUSED(info))
             lu_state_restore();
             do_announce_driver = FALSE;
 
-            printf("Hey, I'm a new version!\n");
+            printf("Poly_list reset.\n");
+            printf("Poly_list has a new version!\n");
         break;
 
         case SEF_INIT_RESTART:
-            printf("Hey, I've just been restarted!\n");
+            printf("Hey, Poly_list has just been restarted!\n");
         break;
     }
 

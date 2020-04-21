@@ -21,4 +21,8 @@
 // Maximum size
 #define POLY_LIST_MAX_SIZE 50
 
+
+#define WRITE_SIZE 11
+#define MAX_BUFFER 30
+
 #endif /* __POLY_LIST_H */
