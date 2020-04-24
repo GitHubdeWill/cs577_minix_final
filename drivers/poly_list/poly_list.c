@@ -294,7 +294,12 @@ static int sef_cb_init(int type, sef_init_info_t *UNUSED(info))
     open_counter = 0;
     switch(type) {
         case SEF_INIT_FRESH:
-            printf("%s", "Poly_list has been started!");
+            
+            printf("%s", "Poly_list has been started!\n");
+            if (the_poly_list == NULL) the_poly_list = createQSList(POLY_LIST_MAX_SIZE);
+            changeQSListMode(the_poly_list, POLY_LIST_MODE_QUEUE);
+
+            printf("%s", "qsList has been created!\n");
         break;
 
         case SEF_INIT_LU:
